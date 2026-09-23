@@ -36,6 +36,19 @@ export const CONFIG = {
 
     COYOTE_TIME: 0.1, // ainda pode pular logo após sair da borda
     JUMP_BUFFER: 0.1, // pulo apertado pouco antes de tocar o chão é aceito
+
+    LIVES: 3, // como no Metal Slug, um acerto = uma vida
+    DEATH_TIME: 1.2, // duração da animação de morte antes de reaparecer
+    RESPAWN_INVULNERABLE: 2, // segundos piscando sem tomar dano após reaparecer
+    HURTBOX_INSET: 2, // caixa de dano um pouco menor que o corpo (mais justo)
+  },
+
+  // A tela anda sozinha para a direita e nunca volta.
+  // Ficar para trás empurra o jogador; se ele estiver preso contra um bloco, morre esmagado.
+  AUTO_SCROLL: {
+    ENABLED: true,
+    SPEED: 28, // px/s (rastejar agachado é 40, então o túnel continua possível)
+    START_DELAY: 1.5,
   },
 
   SHOOTING: {
@@ -78,7 +91,48 @@ export const CONFIG = {
 
   CAMERA: {
     SMOOTHING: 8, // maior = acompanha mais rápido
-    LOOK_AHEAD: 32, // desloca a câmera para onde o jogador está virado
+    ANCHOR: 0.4, // a câmera avança quando o jogador passa desta fração da tela
+  },
+
+  ENEMIES: {
+    GRAVITY: 1000,
+    MAX_FALL_SPEED: 420,
+    ACTIVATION_MARGIN: 32, // inimigos "acordam" quando chegam a esta distância da tela
+    HIT_FLASH_TIME: 0.08,
+
+    BULLET: { speed: 130, size: 4, life: 4, color: '#ff4a4a' },
+
+    SOLDIER: {
+      width: 12,
+      height: 24,
+      hp: 2,
+      speed: 30,
+      sight: 220, // distância horizontal em que enxerga o jogador
+      sightHeight: 40, // diferença de altura máxima para atirar
+      fireInterval: 1.5,
+      fireJitter: 0.5, // variação aleatória do intervalo
+      windup: 0.35, // aviso visual antes do tiro
+      muzzleY: 7, // altura do tiro: agachar desvia
+      score: 100,
+    },
+    RUNNER: {
+      width: 12,
+      height: 22,
+      hp: 1,
+      speed: 95,
+      jumpSpeed: 330,
+      score: 150,
+    },
+    TURRET: {
+      width: 16,
+      height: 16,
+      hp: 6,
+      interval: 2.2,
+      burst: 3,
+      burstGap: 0.18,
+      bulletSpeed: 110,
+      score: 500,
+    },
   },
 
   COLORS: {
@@ -94,6 +148,21 @@ export const CONFIG = {
     MUZZLE_FLASH: '#fff6c0',
     MUZZLE_FLASH_OUTER: '#ffb02e',
     SPARK: '#ffe070',
+    SOLDIER: '#5d7a3a',
+    SOLDIER_DARK: '#3d5226',
+    RUNNER: '#b8563a',
+    RUNNER_DARK: '#7a3624',
+    TURRET: '#6e6e78',
+    TURRET_DARK: '#44444c',
+    ENEMY_SKIN: '#e0b080',
+    WARNING: '#ffe030',
+    HIT_FLASH: '#ffffff',
+    EXPLOSION: ['#fff6c0', '#ffd040', '#ff8a20', '#c0402a', '#555555'],
+    FLAG: '#e03030',
+    FLAG_POLE: '#dddddd',
+    HUD_TEXT: '#ffffff',
+    HUD_SHADOW: '#000000',
+    HUD_LIFE: '#ff4a4a',
     DEBUG_HITBOX: '#ff3b3b',
     DEBUG_TILE: 'rgba(255, 255, 0, 0.5)',
     DEBUG_TEXT: '#ffffff',

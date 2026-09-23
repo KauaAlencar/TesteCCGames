@@ -7,14 +7,13 @@ export class Projectiles {
     this.list = [];
   }
 
-  // x, y = centro da bala.
+  // x, y = centro da bala; owner = 'player' ou 'enemy'.
   spawn(opts) {
     if (this.list.length >= CONFIG.SHOOTING.MAX_PROJECTILES) this.list.shift();
     this.list.push({ ...opts, prevX: opts.x, prevY: opts.y, alive: true });
   }
 
   // Caixa de colisão da bala, alinhada ao eixo principal do movimento.
-  // Fica pronta para testar acerto em inimigos.
   static hitbox(b) {
     const horizontal = Math.abs(b.vx) >= Math.abs(b.vy);
     const w = horizontal ? b.length : b.thickness;
@@ -54,6 +53,10 @@ export class Projectiles {
       if (b.life <= 0 || offscreen) b.alive = false;
     }
 
+    this.removeDead();
+  }
+
+  removeDead() {
     this.list = this.list.filter((b) => b.alive);
   }
 

@@ -12,8 +12,10 @@ const BINDINGS = {
   down: ['ArrowDown', 'KeyS'],
   jump: ['KeyZ', 'Space'],
   shoot: ['KeyX'],
+  start: ['Enter'],
   debug: ['F1'],
   debugWeapon: ['F2'],
+  debugGod: ['F3'],
 };
 
 export class Input {

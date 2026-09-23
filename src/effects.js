@@ -1,4 +1,4 @@
-// Efeitos visuais passageiros (faíscas de impacto). Não afetam a jogabilidade.
+// Efeitos visuais passageiros (faíscas e explosões). Não afetam a jogabilidade.
 
 import { CONFIG } from './config.js';
 
@@ -12,7 +12,7 @@ export class Effects {
 
   // Faíscas que voltam na direção contrária à da bala.
   impact(x, y, vx, vy) {
-    this.flashes.push({ x, y, life: 0.06 });
+    this.flashes.push({ x, y, life: 0.06, size: 5 });
     const back = Math.atan2(-vy, -vx);
     for (let i = 0; i < 5; i++) {
       const a = back + (Math.random() * 2 - 1) * 1.2;
@@ -23,6 +23,28 @@ export class Effects {
         vx: Math.cos(a) * speed,
         vy: Math.sin(a) * speed,
         life: 0.12 + Math.random() * 0.13,
+        size: 1,
+        color: CONFIG.COLORS.SPARK,
+      });
+    }
+  }
+
+  // Explosão em todas as direções, com pedaços maiores e cores de fogo.
+  explosion(x, y, strength = 1) {
+    const palette = CONFIG.COLORS.EXPLOSION;
+    this.flashes.push({ x, y, life: 0.1, size: Math.round(10 * strength) });
+    const count = Math.round(18 * strength);
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const speed = (40 + Math.random() * 140) * strength;
+      this.sparks.push({
+        x,
+        y,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed - 60,
+        life: 0.25 + Math.random() * 0.35,
+        size: Math.random() < 0.4 ? 2 : 1,
+        color: palette[Math.floor(Math.random() * palette.length)],
       });
     }
   }
@@ -43,11 +65,12 @@ export class Effects {
     const { COLORS } = CONFIG;
     ctx.fillStyle = COLORS.MUZZLE_FLASH;
     for (const f of this.flashes) {
-      ctx.fillRect(Math.round(f.x) - 2 - camX, Math.round(f.y) - 2 - camY, 5, 5);
+      const half = Math.floor(f.size / 2);
+      ctx.fillRect(Math.round(f.x) - half - camX, Math.round(f.y) - half - camY, f.size, f.size);
     }
-    ctx.fillStyle = COLORS.SPARK;
     for (const s of this.sparks) {
-      ctx.fillRect(Math.round(s.x) - camX, Math.round(s.y) - camY, 1, 1);
+      ctx.fillStyle = s.color;
+      ctx.fillRect(Math.round(s.x) - camX, Math.round(s.y) - camY, s.size, s.size);
     }
   }
 }

@@ -46,6 +46,7 @@ export class Weapon {
     const dirY = muzzle.dirX * sin + muzzle.dirY * cos;
 
     projectiles.spawn({
+      owner: 'player',
       x: muzzle.x,
       y: muzzle.y,
       vx: dirX * d.speed,

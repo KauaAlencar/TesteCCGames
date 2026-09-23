@@ -2,12 +2,9 @@
 
 import { CONFIG } from './config.js';
 import { Weapon } from './weapon.js';
+import { approach } from './utils.js';
 
 const P = CONFIG.PLAYER;
-
-function approach(value, target, amount) {
-  return value < target ? Math.min(value + amount, target) : Math.max(value - amount, target);
-}
 
 export class Player {
   constructor(level) {
@@ -26,20 +23,69 @@ export class Player {
     this.aimY = 0;
     this.weapon = new Weapon();
     this.muzzleFlashTimer = 0;
-    this.respawn(level);
+
+    this.lives = P.LIVES;
+    this.dead = false;
+    this.deathTimer = 0;
+    this.invulnerableTimer = 0;
+    this.godMode = false; // só para testes (F3 no debug)
+    this.dropping = false; // caindo em linha reta ao reaparecer
+
+    const T = level.tile;
+    this.placeAt(level.spawn.col * T + (T - this.w) / 2, (level.spawn.row + 1) * T - this.h);
   }
 
-  respawn(level) {
-    const T = level.tile;
+  // Coloca o corpo (em pé, parado) com o canto superior esquerdo em (x, y).
+  placeAt(x, y) {
     this.crouching = false;
     this.h = P.HEIGHT;
-    this.x = level.spawn.col * T + (T - this.w) / 2;
-    this.y = (level.spawn.row + 1) * T - this.h;
+    this.x = x;
+    this.y = y;
     this.vx = 0;
     this.vy = 0;
+    this.onGround = false;
+    this.isJumping = false;
     // Sem posição anterior diferente, a interpolação não "arrasta" o sprite.
     this.prevX = this.x;
     this.prevY = this.y;
+  }
+
+  // Reaparece caindo do alto da tela, piscando e com a pistola.
+  respawnAt(x, y) {
+    this.placeAt(x, y);
+    this.dead = false;
+    this.invulnerableTimer = P.RESPAWN_INVULNERABLE;
+    this.dropping = true;
+    this.weapon.setType('PISTOL');
+  }
+
+  get vulnerable() {
+    return !this.dead && !this.godMode && this.invulnerableTimer <= 0;
+  }
+
+  // Caixa que recebe dano: um pouco menor que o corpo, para acertos parecerem justos.
+  hurtbox() {
+    const i = P.HURTBOX_INSET;
+    return { x: this.x + i, y: this.y + i, w: this.w - 2 * i, h: this.h - i };
+  }
+
+  // Um acerto = uma vida. Retorna true se realmente morreu agora.
+  kill() {
+    if (this.dead) return false;
+    this.dead = true;
+    this.lives--;
+    this.deathTimer = P.DEATH_TIME;
+    this.crouching = false;
+    this.h = P.HEIGHT;
+    this.vx = -this.facing * 60; // é arremessado para trás
+    this.vy = -220;
+    this.muzzleFlashTimer = 0;
+    return true;
+  }
+
+  // Terminou a animação de morte e está pronto para reaparecer (ou game over).
+  get deathFinished() {
+    return this.dead && this.deathTimer <= 0;
   }
 
   // Muda a altura mantendo os pés no lugar. Levantar só acontece se houver espaço.
@@ -57,12 +103,24 @@ export class Player {
     this.prevX = this.x;
     this.prevY = this.y;
 
+    // Morto: só a animação de queda, sem colisão nem controle.
+    if (this.dead) {
+      this.deathTimer -= dt;
+      this.vy = Math.min(this.vy + P.GRAVITY * dt, P.MAX_FALL_SPEED);
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      return;
+    }
+    this.invulnerableTimer = Math.max(0, this.invulnerableTimer - dt);
+
     // --- Agachar (só no chão) ---
     const wantsCrouch = input.held('down') && this.onGround;
     if (wantsCrouch !== this.crouching) this.setCrouch(wantsCrouch, level);
 
     // --- Movimento horizontal com aceleração/desaceleração ---
-    const dir = (input.held('right') ? 1 : 0) - (input.held('left') ? 1 : 0);
+    // Ao reaparecer, cai reto até pousar (senão a queda leva o jogador para um buraco).
+    if (this.dropping && this.onGround) this.dropping = false;
+    const dir = this.dropping ? 0 : (input.held('right') ? 1 : 0) - (input.held('left') ? 1 : 0);
     if (dir !== 0) this.facing = dir;
 
     const maxSpeed = this.crouching ? P.CRAWL_SPEED : P.MAX_SPEED;
@@ -112,7 +170,10 @@ export class Player {
     }
 
     // Caiu no buraco.
-    if (this.y > level.height + 64) this.respawn(level);
+    if (this.y > level.height + 32) {
+      this.kill();
+      return;
+    }
 
     // --- Mira e tiro (depois do movimento, para a bala sair do cano na posição nova) ---
     this.updateAim(input);
@@ -156,6 +217,12 @@ export class Player {
     const y = Math.round(this.prevY + (this.y - this.prevY) * alpha) - camY;
     const { w, h } = this;
 
+    // Pisca enquanto está invencível; morto, pisca mais rápido.
+    const blink = this.dead ? 0.06 : 0.1;
+    if ((this.dead || this.invulnerableTimer > 0) && Math.floor(performance.now() / 1000 / blink) % 2) {
+      return;
+    }
+
     // Corpo
     ctx.fillStyle = COLORS.PLAYER;
     ctx.fillRect(x, y, w, h);
@@ -166,6 +233,7 @@ export class Player {
     ctx.fillStyle = COLORS.PLAYER_SKIN;
     const faceX = this.facing > 0 ? x + w - 6 : x + 1;
     ctx.fillRect(faceX, y + 2, 5, 5);
+    if (this.dead) return;
     // Arma apontando na direção da mira
     ctx.fillStyle = COLORS.GUN;
     const gunCX = x + Math.floor(w / 2) + this.facing * 2 - 1;
