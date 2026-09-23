@@ -1,6 +1,7 @@
 // Jogador: movimento, física e desenho.
 
 import { CONFIG } from './config.js';
+import { Weapon } from './weapon.js';
 
 const P = CONFIG.PLAYER;
 
@@ -20,6 +21,11 @@ export class Player {
     this.isJumping = false;
     this.coyoteTimer = 0;
     this.jumpBufferTimer = 0;
+    // Mira: (1,0)/(-1,0) para frente, (0,-1) para cima, (0,1) para baixo (só no ar).
+    this.aimX = 1;
+    this.aimY = 0;
+    this.weapon = new Weapon();
+    this.muzzleFlashTimer = 0;
     this.respawn(level);
   }
 
@@ -47,7 +53,7 @@ export class Player {
     this.prevY = this.y;
   }
 
-  update(dt, input, level) {
+  update(dt, input, level, projectiles) {
     this.prevX = this.x;
     this.prevY = this.y;
 
@@ -107,6 +113,41 @@ export class Player {
 
     // Caiu no buraco.
     if (this.y > level.height + 64) this.respawn(level);
+
+    // --- Mira e tiro (depois do movimento, para a bala sair do cano na posição nova) ---
+    this.updateAim(input);
+    this.muzzleFlashTimer = Math.max(0, this.muzzleFlashTimer - dt);
+    if (this.weapon.update(dt, input, this, projectiles)) {
+      this.muzzleFlashTimer = CONFIG.SHOOTING.MUZZLE_FLASH_TIME;
+    }
+  }
+
+  // Como no Metal Slug: cima mira para cima; baixo só mira para baixo no ar
+  // (no chão, baixo agacha e o tiro sai para frente).
+  updateAim(input) {
+    if (input.held('up')) {
+      this.aimX = 0;
+      this.aimY = -1;
+    } else if (input.held('down') && !this.onGround) {
+      this.aimX = 0;
+      this.aimY = 1;
+    } else {
+      this.aimX = this.facing;
+      this.aimY = 0;
+    }
+  }
+
+  // Ponta do cano (centro da bala ao nascer) para uma posição (x, y) do corpo.
+  muzzleAt(x, y) {
+    const cx = x + this.w / 2 + this.facing * 2;
+    if (this.aimY < 0) return { x: cx, y: y - 6, dirX: 0, dirY: -1 };
+    if (this.aimY > 0) return { x: cx, y: y + this.h + 6, dirX: 0, dirY: 1 };
+    const gunY = y + Math.floor(this.h / 2) + 1;
+    return { x: this.facing > 0 ? x + this.w + 6 : x - 6, y: gunY, dirX: this.facing, dirY: 0 };
+  }
+
+  getMuzzle() {
+    return this.muzzleAt(this.x, this.y);
   }
 
   draw(ctx, alpha, camX, camY) {
@@ -125,10 +166,22 @@ export class Player {
     ctx.fillStyle = COLORS.PLAYER_SKIN;
     const faceX = this.facing > 0 ? x + w - 6 : x + 1;
     ctx.fillRect(faceX, y + 2, 5, 5);
-    // Arma apontando para frente
+    // Arma apontando na direção da mira
     ctx.fillStyle = COLORS.GUN;
-    const gunY = y + Math.floor(h / 2);
-    const gunX = this.facing > 0 ? x + w - 2 : x - 6;
-    ctx.fillRect(gunX, gunY, 8, 3);
+    const gunCX = x + Math.floor(w / 2) + this.facing * 2 - 1;
+    if (this.aimY < 0) ctx.fillRect(gunCX, y - 6, 3, 10);
+    else if (this.aimY > 0) ctx.fillRect(gunCX, y + h - 4, 3, 10);
+    else ctx.fillRect(this.facing > 0 ? x + w - 2 : x - 6, y + Math.floor(h / 2), 8, 3);
+
+    // Clarão no cano logo após o disparo
+    if (this.muzzleFlashTimer > 0) {
+      const m = this.muzzleAt(x, y);
+      const mx = Math.round(m.x);
+      const my = Math.round(m.y);
+      ctx.fillStyle = COLORS.MUZZLE_FLASH_OUTER;
+      ctx.fillRect(mx - 3, my - 3, 7, 7);
+      ctx.fillStyle = COLORS.MUZZLE_FLASH;
+      ctx.fillRect(mx - 2, my - 2, 5, 5);
+    }
   }
 }

@@ -63,6 +63,10 @@ export class Level {
     return SOLID.has(this.grid[row][col]);
   }
 
+  isSolidAt(x, y) {
+    return this.isSolid(Math.floor(x / this.tile), Math.floor(y / this.tile));
+  }
+
   rectOverlapsSolid(x, y, w, h) {
     const T = this.tile;
     const c0 = Math.floor(x / T);

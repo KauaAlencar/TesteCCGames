@@ -4,6 +4,8 @@ import { CONFIG } from './config.js';
 import { Input } from './input.js';
 import { Level } from './level.js';
 import { Player } from './player.js';
+import { Projectiles } from './projectiles.js';
+import { Effects } from './effects.js';
 
 const { WIDTH, HEIGHT, STEP } = CONFIG;
 
@@ -75,6 +77,9 @@ const level = new Level();
 const player = new Player(level);
 const camera = new Camera(level);
 camera.snapTo(player);
+const projectiles = new Projectiles();
+const effects = new Effects();
+const weaponIds = Object.keys(CONFIG.WEAPONS);
 
 let debug = false;
 let fps = 0;
@@ -84,9 +89,16 @@ let fpsTime = 0;
 function update(dt) {
   input.update();
   if (input.pressed('debug')) debug = !debug;
+  // Só para testes: F2 com o debug ligado troca a arma.
+  if (debug && input.pressed('debugWeapon')) {
+    const next = weaponIds[(weaponIds.indexOf(player.weapon.id) + 1) % weaponIds.length];
+    player.weapon.setType(next);
+  }
 
-  player.update(dt, input, level);
+  player.update(dt, input, level, projectiles);
   camera.update(dt, player);
+  projectiles.update(dt, level, { x: camera.x, y: camera.y, w: WIDTH, h: HEIGHT }, effects);
+  effects.update(dt);
 }
 
 function render(alpha) {
@@ -102,7 +114,9 @@ function render(alpha) {
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
   level.draw(ctx, camX, camY, debug);
+  projectiles.draw(ctx, alpha, camX, camY, debug);
   player.draw(ctx, alpha, camX, camY);
+  effects.draw(ctx, camX, camY);
 
   if (debug) drawDebug(alpha, camX, camY);
 }
@@ -115,14 +129,17 @@ function drawDebug(alpha, camX, camY) {
   ctx.lineWidth = 1;
   ctx.strokeRect(px + 0.5, py + 0.5, player.w - 1, player.h - 1);
 
+  const ammo = Number.isFinite(player.weapon.ammo) ? player.weapon.ammo : '∞';
   const lines = [
     `FPS ${fps}`,
     `pos ${player.x.toFixed(1)}, ${player.y.toFixed(1)}`,
     `vel ${player.vx.toFixed(0)}, ${player.vy.toFixed(0)}`,
     `chão ${player.onGround ? 'sim' : 'não'}  agachado ${player.crouching ? 'sim' : 'não'}`,
+    `arma ${player.weapon.def.name} (${ammo})  [F2 troca]`,
+    `balas ${projectiles.list.length}`,
   ];
   ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-  ctx.fillRect(2, 2, 150, lines.length * 10 + 4);
+  ctx.fillRect(2, 2, 180, lines.length * 10 + 4);
   ctx.fillStyle = COLORS.DEBUG_TEXT;
   ctx.font = '8px monospace';
   ctx.textBaseline = 'top';

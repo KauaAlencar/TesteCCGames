@@ -38,6 +38,44 @@ export const CONFIG = {
     JUMP_BUFFER: 0.1, // pulo apertado pouco antes de tocar o chão é aceito
   },
 
+  SHOOTING: {
+    SHOT_BUFFER: 0.1, // tiro apertado durante o cooldown sai assim que possível
+    MUZZLE_FLASH_TIME: 0.05,
+    MAX_PROJECTILES: 64,
+    OFFSCREEN_MARGIN: 16, // balas somem ao passar disto além da borda da tela
+  },
+
+  // Armas definidas por dados: para criar uma nova, basta adicionar uma entrada.
+  // spread = desvio aleatório máximo em graus; ammo = Infinity para munição infinita.
+  WEAPONS: {
+    PISTOL: {
+      name: 'Pistola',
+      auto: false, // um tiro por aperto
+      cooldown: 0.1,
+      speed: 360,
+      damage: 1,
+      spread: 0,
+      life: 1.5,
+      length: 6,
+      thickness: 3,
+      color: '#fff27a',
+      ammo: Infinity,
+    },
+    HEAVY_MACHINE_GUN: {
+      name: 'Heavy Machine Gun',
+      auto: true, // segurar dispara continuamente
+      cooldown: 0.07,
+      speed: 420,
+      damage: 1,
+      spread: 4,
+      life: 1.5,
+      length: 9,
+      thickness: 3,
+      color: '#ffb02e',
+      ammo: 200,
+    },
+  },
+
   CAMERA: {
     SMOOTHING: 8, // maior = acompanha mais rápido
     LOOK_AHEAD: 32, // desloca a câmera para onde o jogador está virado
@@ -53,6 +91,9 @@ export const CONFIG = {
     PLAYER_DARK: '#1c428a',
     PLAYER_SKIN: '#f0c090',
     GUN: '#333333',
+    MUZZLE_FLASH: '#fff6c0',
+    MUZZLE_FLASH_OUTER: '#ffb02e',
+    SPARK: '#ffe070',
     DEBUG_HITBOX: '#ff3b3b',
     DEBUG_TILE: 'rgba(255, 255, 0, 0.5)',
     DEBUG_TEXT: '#ffffff',

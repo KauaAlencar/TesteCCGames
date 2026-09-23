@@ -13,6 +13,7 @@ const BINDINGS = {
   jump: ['KeyZ', 'Space'],
   shoot: ['KeyX'],
   debug: ['F1'],
+  debugWeapon: ['F2'],
 };
 
 export class Input {
