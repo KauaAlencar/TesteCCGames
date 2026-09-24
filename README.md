@@ -4,14 +4,17 @@ Jogo de plataforma 2D no estilo Metal Slug, em HTML5 Canvas puro (sem frameworks
 
 ## Como rodar
 
-ES modules não funcionam abrindo o `index.html` direto, então use um servidor local:
+ES modules não funcionam abrindo o `index.html` direto, então use o servidor local incluído:
 
 ```bash
-python3 -m http.server 8000
-# ou: npx serve .
+python3 serve.py
 ```
 
 Depois abra http://localhost:8000.
+
+Ele desliga o cache do navegador. Com `python3 -m http.server` o navegador pode continuar
+usando arquivos `.js` antigos e as mudanças não aparecem (se usar outro servidor,
+recarregue com Ctrl+Shift+R).
 
 ## Controles
 
