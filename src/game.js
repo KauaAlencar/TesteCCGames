@@ -8,6 +8,7 @@ import { Camera } from './camera.js';
 import { Projectiles } from './projectiles.js';
 import { Effects } from './effects.js';
 import { Enemies } from './enemies.js';
+import { Pickups } from './pickups.js';
 import { overlaps } from './utils.js';
 
 const { WIDTH, HEIGHT } = CONFIG;
@@ -18,18 +19,108 @@ export function createWorld() {
   const player = new Player(level);
   const camera = new Camera(level);
   camera.snapTo(player);
-  return {
+  const world = {
     level,
     player,
     camera,
     projectiles: new Projectiles(),
     effects: new Effects(),
     enemies: new Enemies(level),
+    pickups: new Pickups(level),
     score: 0,
     state: 'playing', // 'playing' | 'gameover' | 'victory'
     time: 0, // tempo desde o início da partida
     stateTime: 0, // tempo desde a última mudança de estado
+    sounds: [], // nomes de sons deste passo; main.js toca e esvazia
+    shakeTime: 0,
+    shakeAmount: 0,
+    shakeX: 0,
+    shakeY: 0,
+    playerWasDead: false,
   };
+  world.shake = (amount) => {
+    world.shakeAmount = Math.max(amount, world.shakeTime > 0 ? world.shakeAmount : 0);
+    world.shakeTime = CONFIG.SHAKE.DURATION;
+  };
+  return world;
+}
+
+// Sons disparados pelos eventos do jogador neste passo.
+const PLAYER_SOUNDS = {
+  jump: 'jump',
+  grenade: 'throw',
+  'shoot:PISTOL': 'pistol',
+  'shoot:HEAVY_MACHINE_GUN': 'hmg',
+  'shoot:ROCKET_LAUNCHER': 'rocket',
+  'shoot:FLAME_SHOT': 'flame',
+};
+
+// Distância do centro de uma explosão até o retângulo mais próximo.
+function inBlast(ex, box) {
+  const nx = Math.max(box.x, Math.min(ex.x, box.x + box.w));
+  const ny = Math.max(box.y, Math.min(ex.y, box.y + box.h));
+  return Math.hypot(ex.x - nx, ex.y - ny) <= ex.radius;
+}
+
+// Balas x inimigos/prisioneiros, balas inimigas x jogador, contato, explosões e itens.
+function resolveCombat(w) {
+  const { player, projectiles, enemies, pickups, effects } = w;
+
+  for (const b of projectiles.list) {
+    if (!b.alive) continue;
+    const box = Projectiles.hitbox(b);
+
+    if (b.owner === 'player') {
+      const targets = [...enemies.active, ...pickups.tiedPrisoners];
+      for (const t of targets) {
+        if ((t.isPrisoner ? !t.tied : !t.alive) || !overlaps(box, t)) continue;
+        if (b.hitSet?.has(t)) continue; // chama: cada alvo só uma vez
+        if (b.explosive) {
+          projectiles.destroy(b, effects);
+          break;
+        }
+        if (t.isPrisoner) {
+          pickups.free(t, w);
+        } else {
+          t.hit(b.damage);
+          effects.impact(b.x, b.y, b.vx, b.vy);
+          w.sounds.push('hit');
+        }
+        if (b.pierce) {
+          (b.hitSet ??= new Set()).add(t);
+          continue;
+        }
+        b.alive = false;
+        break;
+      }
+    } else if (player.vulnerable && overlaps(box, player.hurtbox())) {
+      b.alive = false;
+      player.kill();
+    }
+  }
+
+  if (player.vulnerable) {
+    for (const enemy of enemies.active) {
+      if (enemy.alive && enemy.contactDamage && overlaps(enemy, player.hurtbox())) {
+        player.kill();
+        break;
+      }
+    }
+  }
+
+  // Explosões (foguetes e granadas do jogador) acertam tudo dentro do raio.
+  for (const ex of projectiles.takeExplosions()) {
+    effects.explosion(ex.x, ex.y, ex.radius / 20);
+    w.sounds.push('explosion');
+    w.shake(CONFIG.SHAKE.EXPLOSION);
+    if (ex.owner !== 'player') continue;
+    for (const enemy of enemies.active) if (enemy.alive && inBlast(ex, enemy)) enemy.hit(ex.damage);
+    for (const p of pickups.tiedPrisoners) if (inBlast(ex, p)) pickups.free(p, w);
+  }
+
+  enemies.removeDead(w);
+  projectiles.removeDead();
+  pickups.touch(player, w);
 }
 
 function setState(w, state) {
@@ -40,16 +131,13 @@ function setState(w, state) {
 // A tela empurra quem fica para trás; preso contra um bloco, o jogador é esmagado.
 // Também não deixa sair pela direita.
 function keepPlayerOnScreen(w) {
-  const { player, camera, level, effects } = w;
+  const { player, camera, level } = w;
   if (player.dead) return;
   const left = camera.x;
   const right = camera.x + WIDTH - player.w;
   if (player.x < left) {
     level.moveX(player, left - player.x);
-    if (player.x < left - 0.01) {
-      player.kill();
-      effects.explosion(player.x + player.w / 2, player.y + player.h / 2, 0.6);
-    }
+    if (player.x < left - 0.01) player.kill();
   } else if (player.x > right) {
     level.moveX(player, right - player.x);
   }
@@ -79,9 +167,14 @@ function respawnPlayer(w) {
 
 // Um passo de física da partida em andamento.
 export function stepWorld(w, dt, input) {
-  const { player, camera, level, projectiles, effects, enemies } = w;
+  const { player, camera, level, projectiles, effects, enemies, pickups } = w;
   w.time += dt;
   w.stateTime += dt;
+
+  w.shakeTime = Math.max(0, w.shakeTime - dt);
+  const shake = w.shakeTime > 0 ? w.shakeAmount * (w.shakeTime / CONFIG.SHAKE.DURATION) : 0;
+  w.shakeX = Math.round((Math.random() * 2 - 1) * shake);
+  w.shakeY = Math.round((Math.random() * 2 - 1) * shake);
 
   if (w.state !== 'playing') {
     effects.update(dt);
@@ -89,21 +182,36 @@ export function stepWorld(w, dt, input) {
   }
 
   player.update(dt, input, level, projectiles);
+  for (const e of player.events) if (PLAYER_SOUNDS[e]) w.sounds.push(PLAYER_SOUNDS[e]);
   camera.update(dt, player);
   keepPlayerOnScreen(w);
   enemies.update(dt, w);
+  pickups.update(dt, w);
   projectiles.update(dt, level, { x: camera.x, y: camera.y, w: WIDTH, h: HEIGHT }, effects);
-  w.score += enemies.handleCollisions(w);
+  resolveCombat(w);
   effects.update(dt);
 
+  // Morreu neste passo (tiro, contato, buraco ou esmagado).
+  if (player.dead && !w.playerWasDead) {
+    w.sounds.push('playerDie');
+    w.shake(CONFIG.SHAKE.PLAYER_DEATH);
+    effects.explosion(player.x + player.w / 2, player.y + player.h / 2, 0.6);
+  }
+  w.playerWasDead = player.dead;
+
   if (player.deathFinished) {
-    if (player.lives > 0) respawnPlayer(w);
-    else setState(w, 'gameover');
+    if (player.lives > 0) {
+      respawnPlayer(w);
+    } else {
+      setState(w, 'gameover');
+      w.sounds.push('gameover');
+    }
   }
 
   const goal = level.goalBox();
   if (!player.dead && goal && overlaps(player, goal)) {
     w.score += player.lives * 1000; // bônus por vida restante
     setState(w, 'victory');
+    w.sounds.push('victory');
   }
 }

@@ -1,4 +1,4 @@
-// Efeitos visuais passageiros (faíscas e explosões). Não afetam a jogabilidade.
+// Efeitos visuais passageiros (faíscas, explosões, textos). Não afetam a jogabilidade.
 
 import { CONFIG } from './config.js';
 
@@ -8,6 +8,12 @@ export class Effects {
   constructor() {
     this.sparks = [];
     this.flashes = [];
+    this.texts = [];
+  }
+
+  // Texto que sobe e some (ex.: "OBRIGADO!", nome da arma pega).
+  text(x, y, str, color = CONFIG.COLORS.HUD_TEXT) {
+    this.texts.push({ x, y, str, color, life: 1 });
   }
 
   // Faíscas que voltam na direção contrária à da bala.
@@ -57,6 +63,11 @@ export class Effects {
       s.life -= dt;
     }
     for (const f of this.flashes) f.life -= dt;
+    for (const t of this.texts) {
+      t.y -= 20 * dt;
+      t.life -= dt;
+    }
+    this.texts = this.texts.filter((t) => t.life > 0);
     this.sparks = this.sparks.filter((s) => s.life > 0);
     this.flashes = this.flashes.filter((f) => f.life > 0);
   }
@@ -72,5 +83,19 @@ export class Effects {
       ctx.fillStyle = s.color;
       ctx.fillRect(Math.round(s.x) - camX, Math.round(s.y) - camY, s.size, s.size);
     }
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const t of this.texts) {
+      if (t.life < 0.3 && Math.floor(t.life * 20) % 2) continue; // pisca antes de sumir
+      const x = Math.round(t.x) - camX;
+      const y = Math.round(t.y) - camY;
+      ctx.fillStyle = COLORS.HUD_SHADOW;
+      ctx.fillText(t.str, x + 1, y + 1);
+      ctx.fillStyle = t.color;
+      ctx.fillText(t.str, x, y);
+    }
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
   }
 }

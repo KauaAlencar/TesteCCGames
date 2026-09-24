@@ -3,7 +3,9 @@
 import { CONFIG } from './config.js';
 import { Input } from './input.js';
 import { createWorld, stepWorld } from './game.js';
-import { drawHud, drawBanner } from './hud.js';
+import { drawHud, drawBanner, drawTitle } from './hud.js';
+import { drawBackground } from './background.js';
+import { unlockAudio, toggleMute, isMuted, playSound } from './audio.js';
 
 const { WIDTH, HEIGHT, STEP } = CONFIG;
 
@@ -28,6 +30,9 @@ resize();
 
 const input = new Input();
 let world = createWorld();
+let onTitle = true;
+// O navegador só toca som depois de uma interação do usuário.
+window.addEventListener('keydown', unlockAudio);
 const weaponIds = Object.keys(CONFIG.WEAPONS);
 
 let debug = false;
@@ -46,33 +51,51 @@ function update(dt) {
     player.weapon.setType(next);
   }
   if (debug && input.pressed('debugGod')) player.godMode = !player.godMode;
+  if (input.pressed('mute')) toggleMute();
+
+  if (onTitle) {
+    if (input.pressed('start')) {
+      onTitle = false;
+      world = createWorld();
+    }
+    return;
+  }
 
   if (world.state !== 'playing' && world.stateTime > 0.8) {
     if (input.pressed('start') || input.pressed('jump')) world = createWorld();
   }
   stepWorld(world, dt, input);
+  for (const name of world.sounds) playSound(name);
+  world.sounds.length = 0;
 }
 
 function render(alpha) {
-  const { COLORS } = CONFIG;
-  const { player, camera, level, projectiles, effects, enemies } = world;
+  const { player, camera, level, projectiles, effects, enemies, pickups } = world;
   // Câmera arredondada para pixels inteiros: tudo fica alinhado à grade e nítido.
-  const camX = Math.round(camera.prevX + (camera.x - camera.prevX) * alpha);
-  const camY = Math.round(camera.prevY + (camera.y - camera.prevY) * alpha);
+  // O tremor de tela desloca só o mundo, não o HUD.
+  const baseX = Math.round(camera.prevX + (camera.x - camera.prevX) * alpha);
+  const camX = baseX + world.shakeX;
+  const camY = Math.round(camera.prevY + (camera.y - camera.prevY) * alpha) + world.shakeY;
 
-  const sky = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-  sky.addColorStop(0, COLORS.SKY);
-  sky.addColorStop(1, COLORS.SKY_BOTTOM);
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
+  drawBackground(ctx, baseX);
   level.draw(ctx, camX, camY, debug);
+  pickups.draw(ctx, alpha, camX, camY);
   enemies.draw(ctx, alpha, camX, camY, debug);
   projectiles.draw(ctx, alpha, camX, camY, debug);
   player.draw(ctx, alpha, camX, camY);
   effects.draw(ctx, camX, camY);
 
+  if (onTitle) {
+    drawTitle(ctx, performance.now() / 1000);
+    return;
+  }
+
   drawHud(ctx, world);
+  if (isMuted()) {
+    ctx.font = '8px monospace';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('SOM DESLIGADO (M)', 6, HEIGHT - 12);
+  }
   if (world.state === 'gameover') {
     drawBanner(ctx, 'GAME OVER', `PONTOS ${world.score}  -  ENTER PARA TENTAR DE NOVO`);
   } else if (world.state === 'victory') {

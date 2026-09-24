@@ -41,6 +41,19 @@ export const CONFIG = {
     DEATH_TIME: 1.2, // duração da animação de morte antes de reaparecer
     RESPAWN_INVULNERABLE: 2, // segundos piscando sem tomar dano após reaparecer
     HURTBOX_INSET: 2, // caixa de dano um pouco menor que o corpo (mais justo)
+    BOMBS: 10, // granadas no início e a cada vida
+  },
+
+  // Granada: lançada em arco, explode ao tocar em bloco ou inimigo.
+  GRENADE: {
+    SPEED_X: 150,
+    SPEED_Y: 230,
+    GRAVITY: 700,
+    COOLDOWN: 0.35,
+    RADIUS: 30,
+    DAMAGE: 5,
+    SIZE: 5,
+    LIFE: 3,
   },
 
   // A tela anda sozinha para a direita e nunca volta.
@@ -87,6 +100,63 @@ export const CONFIG = {
       color: '#ffb02e',
       ammo: 200,
     },
+    ROCKET_LAUNCHER: {
+      name: 'Rocket Launcher',
+      kind: 'rocket', // só muda o desenho
+      auto: false,
+      cooldown: 0.3,
+      speed: 90,
+      accel: 700, // começa devagar e acelera
+      maxSpeed: 380,
+      damage: 0,
+      explosive: { radius: 26, damage: 4 },
+      spread: 0,
+      life: 2,
+      length: 10,
+      thickness: 4,
+      color: '#c8c8c8',
+      ammo: 30,
+    },
+    FLAME_SHOT: {
+      name: 'Flame Shot',
+      kind: 'flame',
+      auto: false,
+      cooldown: 0.22,
+      speed: 230,
+      damage: 3,
+      pierce: true, // atravessa inimigos, acertando cada um uma vez
+      spread: 0,
+      life: 0.35,
+      length: 20,
+      thickness: 10,
+      color: '#ff7a20',
+      ammo: 30,
+    },
+  },
+
+  // Prisioneiros e itens.
+  PICKUPS: {
+    GRAVITY: 800,
+    RESCUE_SCORE: 100,
+    SALUTE_TIME: 0.7, // continência antes de fugir
+    ESCAPE_SPEED: 70,
+    BOMB_REFILL: 10,
+    // Cada prisioneiro solta o próximo item desta lista (em ciclo).
+    ITEM_SEQUENCE: ['HEAVY_MACHINE_GUN', 'BOMBS', 'ROCKET_LAUNCHER', 'FLAME_SHOT'],
+    ITEMS: {
+      HEAVY_MACHINE_GUN: { letter: 'H', color: '#d0a030', label: 'HEAVY MACHINE GUN!' },
+      ROCKET_LAUNCHER: { letter: 'R', color: '#c04040', label: 'ROCKET LAUNCHER!' },
+      FLAME_SHOT: { letter: 'F', color: '#e07020', label: 'FLAME SHOT!' },
+      BOMBS: { letter: 'B', color: '#4a8a4a', label: '+10 BOMBAS' },
+    },
+  },
+
+  // Tremor de tela (em pixels) e duração.
+  SHAKE: {
+    EXPLOSION: 3,
+    BIG_EXPLOSION: 5,
+    PLAYER_DEATH: 4,
+    DURATION: 0.25,
   },
 
   CAMERA: {
@@ -141,6 +211,7 @@ export const CONFIG = {
     TILE: '#6b4a2e',
     TILE_TOP: '#8fbf4a',
     TILE_EDGE: '#4a321f',
+    TILE_LIGHT: '#86603c',
     PLAYER: '#2f6fd6',
     PLAYER_DARK: '#1c428a',
     PLAYER_SKIN: '#f0c090',

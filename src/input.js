@@ -12,6 +12,8 @@ const BINDINGS = {
   down: ['ArrowDown', 'KeyS'],
   jump: ['KeyZ', 'Space'],
   shoot: ['KeyX'],
+  grenade: ['KeyC'],
+  mute: ['KeyM'],
   start: ['Enter'],
   debug: ['F1'],
   debugWeapon: ['F2'],

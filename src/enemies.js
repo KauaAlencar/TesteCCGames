@@ -2,8 +2,7 @@
 // dos marcadores da fase e resolve as colisões com balas e com o jogador.
 
 import { CONFIG } from './config.js';
-import { Projectiles } from './projectiles.js';
-import { overlaps } from './utils.js';
+import { drawSprite } from './sprites.js';
 
 const E = CONFIG.ENEMIES;
 const { COLORS } = CONFIG;
@@ -12,10 +11,12 @@ function onScreen(body, camera) {
   return body.x + body.w > camera.x && body.x < camera.x + CONFIG.WIDTH;
 }
 
-function spawnEnemyBullet(projectiles, x, y, dirX, dirY, speed = E.BULLET.speed) {
+function spawnEnemyBullet(world, x, y, dirX, dirY, speed = E.BULLET.speed) {
   const len = Math.hypot(dirX, dirY) || 1;
-  projectiles.spawn({
+  world.sounds.push('enemyShot');
+  world.projectiles.spawn({
     owner: 'enemy',
+    kind: 'enemy',
     x,
     y,
     vx: (dirX / len) * speed,
@@ -46,6 +47,7 @@ class Enemy {
     this.alive = true;
     this.hitFlash = 0;
     this.contactDamage = false;
+    this.animTime = Math.random(); // desencontra as animações
   }
 
   get cx() {
@@ -85,6 +87,7 @@ class Enemy {
     this.prevX = this.x;
     this.prevY = this.y;
     this.hitFlash = Math.max(0, this.hitFlash - dt);
+    this.animTime += dt;
     this.think(dt, world);
   }
 
@@ -115,14 +118,15 @@ class Soldier extends Enemy {
     return Math.abs(dx) < this.def.sight && Math.abs(dy) < this.def.sightHeight;
   }
 
-  think(dt, { level, player, camera, projectiles }) {
+  think(dt, world) {
+    const { level, player, camera } = world;
     if (this.sees(player, camera)) {
       this.facing = player.x + player.w / 2 < this.cx ? -1 : 1;
       this.vx = 0;
       this.fireTimer -= dt;
       if (this.fireTimer <= 0) {
         const mx = this.facing > 0 ? this.x + this.w + 4 : this.x - 4;
-        spawnEnemyBullet(projectiles, mx, this.y + this.def.muzzleY, this.facing, 0);
+        spawnEnemyBullet(world, mx, this.y + this.def.muzzleY, this.facing, 0);
         this.fireTimer = this.nextFireDelay();
       }
     } else {
@@ -144,18 +148,18 @@ class Soldier extends Enemy {
     const { x, y } = this.screenPos(alpha, camX, camY);
     const { w, h } = this;
     const flash = this.hitFlash > 0;
-    ctx.fillStyle = flash ? COLORS.HIT_FLASH : COLORS.SOLDIER;
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = flash ? COLORS.HIT_FLASH : COLORS.SOLDIER_DARK;
-    ctx.fillRect(x, y, w, 4); // capacete
-    ctx.fillRect(x, y + h - 5, w, 5);
-    ctx.fillStyle = COLORS.ENEMY_SKIN;
-    ctx.fillRect(this.facing > 0 ? x + w - 6 : x + 1, y + 4, 5, 4);
-    ctx.fillStyle = COLORS.GUN;
-    ctx.fillRect(this.facing > 0 ? x + w - 2 : x - 5, y + this.def.muzzleY - 1, 7, 3);
+    const moving = this.vx !== 0;
+    drawSprite(ctx, 'soldier', moving ? 'run' : 'idle', this.animTime, x + w / 2, y + h,
+      this.facing, moving ? 7 : 2, flash);
+    // Fuzil
+    const gy = y + this.def.muzzleY;
+    ctx.fillStyle = '#1a1a14';
+    ctx.fillRect(this.facing > 0 ? x + 4 : x - 6, gy - 2, 14, 4);
+    ctx.fillStyle = '#6a5a3a';
+    ctx.fillRect(this.facing > 0 ? x + 5 : x - 5, gy - 1, 12, 2);
     if (this.warning && Math.floor(performance.now() / 60) % 2) {
       ctx.fillStyle = COLORS.WARNING;
-      ctx.fillRect(this.facing > 0 ? x + w + 4 : x - 7, y + this.def.muzzleY - 2, 3, 3);
+      ctx.fillRect(this.facing > 0 ? x + w + 5 : x - 8, gy - 2, 3, 3);
     }
   }
 }
@@ -182,16 +186,14 @@ class Runner extends Enemy {
   draw(ctx, alpha, camX, camY) {
     const { x, y } = this.screenPos(alpha, camX, camY);
     const { w, h } = this;
-    const flash = this.hitFlash > 0;
-    ctx.fillStyle = flash ? COLORS.HIT_FLASH : COLORS.RUNNER;
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = flash ? COLORS.HIT_FLASH : COLORS.RUNNER_DARK;
-    ctx.fillRect(x, y + h - 5, w, 5);
-    ctx.fillStyle = COLORS.ENEMY_SKIN;
-    ctx.fillRect(this.facing > 0 ? x + w - 6 : x + 1, y + 2, 5, 5);
-    // Faca
-    ctx.fillStyle = COLORS.HIT_FLASH;
-    ctx.fillRect(this.facing > 0 ? x + w : x - 5, y + 11, 5, 2);
+    const anim = !this.onGround ? 'jump' : this.awake ? 'run' : 'idle';
+    drawSprite(ctx, 'runner', anim, this.animTime, x + w / 2, y + h, this.facing, 14,
+      this.hitFlash > 0);
+    // Faca erguida
+    ctx.fillStyle = '#1a1414';
+    ctx.fillRect(this.facing > 0 ? x + w - 1 : x - 6, y + 9, 7, 3);
+    ctx.fillStyle = '#e8e8f0';
+    ctx.fillRect(this.facing > 0 ? x + w : x - 5, y + 10, 5, 1);
   }
 }
 
@@ -205,7 +207,8 @@ class Turret extends Enemy {
     this.aimY = 0;
   }
 
-  think(dt, { player, camera, projectiles }) {
+  think(dt, world) {
+    const { player, camera } = world;
     const tx = player.x + player.w / 2 - this.cx;
     const ty = player.y + player.h / 2 - (this.y + 4);
     const len = Math.hypot(tx, ty) || 1;
@@ -219,7 +222,7 @@ class Turret extends Enemy {
     if (this.shotsLeft === 0) this.shotsLeft = this.def.burst;
     const bx = this.cx + this.aimX * 16;
     const by = this.y + 4 + this.aimY * 16;
-    spawnEnemyBullet(projectiles, bx, by, this.aimX, this.aimY, this.def.bulletSpeed);
+    spawnEnemyBullet(world, bx, by, this.aimX, this.aimY, this.def.bulletSpeed);
     this.shotsLeft--;
     this.timer = this.shotsLeft > 0 ? this.def.burstGap : this.def.interval;
   }
@@ -273,46 +276,18 @@ export class Enemies {
     );
   }
 
-  // Balas do jogador x inimigos, balas inimigas x jogador, contato x jogador.
-  // Retorna os pontos ganhos neste passo.
-  handleCollisions({ player, projectiles, effects }) {
-    let score = 0;
-
-    for (const b of projectiles.list) {
-      if (!b.alive) continue;
-      const box = Projectiles.hitbox(b);
-
-      if (b.owner === 'player') {
-        for (const enemy of this.active) {
-          if (!enemy.alive || !overlaps(box, enemy)) continue;
-          b.alive = false;
-          enemy.hit(b.damage);
-          effects.impact(b.x, b.y, b.vx, b.vy);
-          if (!enemy.alive) {
-            score += enemy.def.score;
-            effects.explosion(enemy.cx, enemy.cy, enemy instanceof Turret ? 1.5 : 1);
-          }
-          break;
-        }
-      } else if (player.vulnerable && overlaps(box, player.hurtbox())) {
-        b.alive = false;
-        player.kill();
-        effects.explosion(b.x, b.y, 0.5);
-      }
+  // Tira os inimigos mortos (as colisões ficam em game.js), com explosão e pontos.
+  removeDead(world) {
+    for (const e of this.active) {
+      if (e.alive) continue;
+      const big = e instanceof Turret;
+      world.score += e.def.score;
+      world.effects.explosion(e.cx, e.cy, big ? 1.5 : 1);
+      world.effects.text(e.cx, e.y - 4, String(e.def.score));
+      world.sounds.push(big ? 'bigExplosion' : 'enemyDie');
+      if (big) world.shake(CONFIG.SHAKE.EXPLOSION);
     }
-
-    if (player.vulnerable) {
-      for (const enemy of this.active) {
-        if (enemy.alive && enemy.contactDamage && overlaps(enemy, player.hurtbox())) {
-          player.kill();
-          break;
-        }
-      }
-    }
-
     this.active = this.active.filter((e) => e.alive);
-    projectiles.removeDead();
-    return score;
   }
 
   draw(ctx, alpha, camX, camY, debug) {

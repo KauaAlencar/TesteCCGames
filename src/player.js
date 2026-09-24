@@ -3,6 +3,7 @@
 import { CONFIG } from './config.js';
 import { Weapon } from './weapon.js';
 import { approach } from './utils.js';
+import { drawSprite } from './sprites.js';
 
 const P = CONFIG.PLAYER;
 
@@ -30,6 +31,11 @@ export class Player {
     this.invulnerableTimer = 0;
     this.godMode = false; // só para testes (F3 no debug)
     this.dropping = false; // caindo em linha reta ao reaparecer
+    this.bombs = P.BOMBS;
+    this.grenadeCooldown = 0;
+    this.animTime = 0;
+    // O que aconteceu neste passo (pulo, tiro, granada), para o jogo tocar sons.
+    this.events = [];
 
     const T = level.tile;
     this.placeAt(level.spawn.col * T + (T - this.w) / 2, (level.spawn.row + 1) * T - this.h);
@@ -56,6 +62,7 @@ export class Player {
     this.dead = false;
     this.invulnerableTimer = P.RESPAWN_INVULNERABLE;
     this.dropping = true;
+    this.bombs = P.BOMBS;
     this.weapon.setType('PISTOL');
   }
 
@@ -102,6 +109,8 @@ export class Player {
   update(dt, input, level, projectiles) {
     this.prevX = this.x;
     this.prevY = this.y;
+    this.events.length = 0;
+    this.animTime += dt;
 
     // Morto: só a animação de queda, sem colisão nem controle.
     if (this.dead) {
@@ -148,6 +157,7 @@ export class Player {
       this.onGround = false;
       this.jumpBufferTimer = 0;
       this.coyoteTimer = 0;
+      this.events.push('jump');
     }
 
     // Altura variável: soltar o botão cedo corta a subida.
@@ -178,9 +188,39 @@ export class Player {
     // --- Mira e tiro (depois do movimento, para a bala sair do cano na posição nova) ---
     this.updateAim(input);
     this.muzzleFlashTimer = Math.max(0, this.muzzleFlashTimer - dt);
+    const weaponId = this.weapon.id; // a arma pode trocar ao acabar a munição
     if (this.weapon.update(dt, input, this, projectiles)) {
       this.muzzleFlashTimer = CONFIG.SHOOTING.MUZZLE_FLASH_TIME;
+      this.events.push(`shoot:${weaponId}`);
     }
+
+    // --- Granada ---
+    this.grenadeCooldown = Math.max(0, this.grenadeCooldown - dt);
+    if (input.pressed('grenade') && this.bombs > 0 && this.grenadeCooldown === 0) {
+      this.throwGrenade(projectiles);
+    }
+  }
+
+  // Lançada da mão, em arco, somando um pouco da velocidade do jogador.
+  throwGrenade(projectiles) {
+    const G = CONFIG.GRENADE;
+    this.bombs--;
+    this.grenadeCooldown = G.COOLDOWN;
+    projectiles.spawn({
+      owner: 'player',
+      kind: 'grenade',
+      x: this.x + this.w / 2 + this.facing * 6,
+      y: this.y + 4,
+      vx: this.facing * G.SPEED_X + this.vx * 0.3,
+      vy: -G.SPEED_Y,
+      gravity: G.GRAVITY,
+      damage: 0,
+      explosive: { radius: G.RADIUS, damage: G.DAMAGE },
+      life: G.LIFE,
+      length: G.SIZE,
+      thickness: G.SIZE,
+    });
+    this.events.push('grenade');
   }
 
   // Como no Metal Slug: cima mira para cima; baixo só mira para baixo no ar
@@ -211,6 +251,13 @@ export class Player {
     return this.muzzleAt(this.x, this.y);
   }
 
+  // Qual animação usar agora.
+  animation() {
+    if (this.crouching) return Math.abs(this.vx) > 5 ? 'crawl' : 'crouch';
+    if (!this.onGround) return this.vy < 0 ? 'jump' : 'fall';
+    return Math.abs(this.vx) > 10 ? 'run' : 'idle';
+  }
+
   draw(ctx, alpha, camX, camY) {
     const { COLORS } = CONFIG;
     const x = Math.round(this.prevX + (this.x - this.prevX) * alpha) - camX;
@@ -223,29 +270,41 @@ export class Player {
       return;
     }
 
-    // Corpo
-    ctx.fillStyle = COLORS.PLAYER;
-    ctx.fillRect(x, y, w, h);
-    // Pernas / calça
-    ctx.fillStyle = COLORS.PLAYER_DARK;
-    ctx.fillRect(x, y + h - 5, w, 5);
-    // Rosto, do lado para onde está virado
-    ctx.fillStyle = COLORS.PLAYER_SKIN;
-    const faceX = this.facing > 0 ? x + w - 6 : x + 1;
-    ctx.fillRect(faceX, y + 2, 5, 5);
+    const anim = this.dead ? 'fall' : this.animation();
+    const fps = anim === 'run' ? 12 : anim === 'idle' ? 2 : 6;
+    drawSprite(ctx, 'player', anim, this.animTime, x + w / 2, y + h, this.facing, fps);
     if (this.dead) return;
-    // Arma apontando na direção da mira
-    ctx.fillStyle = COLORS.GUN;
-    const gunCX = x + Math.floor(w / 2) + this.facing * 2 - 1;
-    if (this.aimY < 0) ctx.fillRect(gunCX, y - 6, 3, 10);
-    else if (this.aimY > 0) ctx.fillRect(gunCX, y + h - 4, 3, 10);
-    else ctx.fillRect(this.facing > 0 ? x + w - 2 : x - 6, y + Math.floor(h / 2), 8, 3);
+
+    // Braço + arma, apontando para a mira (desenhados por cima do sprite).
+    const f = this.facing;
+    const cx = x + w / 2;
+    const m = this.muzzleAt(x, y);
+    const mx = Math.round(m.x);
+    const my = Math.round(m.y);
+    const gunColor = this.weapon.id === 'PISTOL' ? COLORS.GUN : '#555560';
+    if (this.aimY === 0) {
+      const gx0 = f > 0 ? Math.round(cx) : mx;
+      const gx1 = f > 0 ? mx : Math.round(cx);
+      ctx.fillStyle = '#1a1a22';
+      ctx.fillRect(gx0, my - 2, gx1 - gx0, 4);
+      ctx.fillStyle = gunColor;
+      ctx.fillRect(gx0 + 1, my - 1, gx1 - gx0 - 2, 2);
+      // Mão
+      ctx.fillStyle = COLORS.PLAYER_SKIN;
+      ctx.fillRect(Math.round(cx + f * 2) - 1, my - 1, 3, 3);
+    } else {
+      const gy0 = this.aimY < 0 ? my : Math.round(y + h - 6);
+      const gy1 = this.aimY < 0 ? Math.round(y + 8) : my;
+      ctx.fillStyle = '#1a1a22';
+      ctx.fillRect(mx - 2, gy0, 4, gy1 - gy0);
+      ctx.fillStyle = gunColor;
+      ctx.fillRect(mx - 1, gy0 + 1, 2, gy1 - gy0 - 2);
+      ctx.fillStyle = COLORS.PLAYER_SKIN;
+      ctx.fillRect(mx - 1, this.aimY < 0 ? gy1 - 3 : gy0, 3, 3);
+    }
 
     // Clarão no cano logo após o disparo
     if (this.muzzleFlashTimer > 0) {
-      const m = this.muzzleAt(x, y);
-      const mx = Math.round(m.x);
-      const my = Math.round(m.y);
       ctx.fillStyle = COLORS.MUZZLE_FLASH_OUTER;
       ctx.fillRect(mx - 3, my - 3, 7, 7);
       ctx.fillStyle = COLORS.MUZZLE_FLASH;

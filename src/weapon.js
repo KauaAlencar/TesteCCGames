@@ -18,6 +18,12 @@ export class Weapon {
     this.ammo = this.def.ammo;
   }
 
+  // Pegou a arma num item: se já é a mesma, soma a munição.
+  give(id) {
+    if (this.id === id) this.ammo += CONFIG.WEAPONS[id].ammo;
+    else this.setType(id);
+  }
+
   // Retorna true se disparou neste passo.
   update(dt, input, shooter, projectiles) {
     this.cooldown = Math.max(0, this.cooldown - dt);
@@ -45,13 +51,20 @@ export class Weapon {
     const dirX = muzzle.dirX * cos - muzzle.dirY * sin;
     const dirY = muzzle.dirX * sin + muzzle.dirY * cos;
 
+    // Projéteis compridos (chamas) nascem com a traseira no cano, não o centro.
+    const back = Math.max(0, d.length / 2 - 4);
     projectiles.spawn({
       owner: 'player',
-      x: muzzle.x,
-      y: muzzle.y,
+      kind: d.kind ?? 'bullet',
+      x: muzzle.x + dirX * back,
+      y: muzzle.y + dirY * back,
       vx: dirX * d.speed,
       vy: dirY * d.speed,
+      accel: d.accel ?? 0,
+      maxSpeed: d.maxSpeed ?? d.speed,
       damage: d.damage,
+      pierce: d.pierce ?? false,
+      explosive: d.explosive ?? null,
       life: d.life,
       length: d.length,
       thickness: d.thickness,
